@@ -36,10 +36,12 @@ dependencies = [
 
 [project.scripts]
 boltz = "boltz.main:cli"
+boltz-mcp = "boltz.mcp:main"
 
 [project.optional-dependencies]
 lint = ["ruff"]
 test = ["pytest", "requests"]
+mcp = ["mcp[cli]>=1.0.0"]
 cuda = [
     "cuequivariance_ops_cu12>=0.5.0",
     "cuequivariance_ops_torch_cu12>=0.5.0",
