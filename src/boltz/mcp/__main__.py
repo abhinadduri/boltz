@@ -93,7 +93,18 @@ def _build_predict_cli_args(kwargs: dict[str, Any]) -> list[str]:
         args.append("--write_full_pde")
     if kwargs.get("affinity_mw_correction"):
         args.append("--affinity_mw_correction")
+    if kwargs.get("no_kernels"):
+        args.append("--no_kernels")
     return args
+
+
+def _kernels_available() -> bool:
+    """Check if cuequivariance_torch is importable."""
+    try:
+        import cuequivariance_torch  # noqa: F401
+        return True
+    except Exception:
+        return False
 
 
 def _launch_prediction(
@@ -111,6 +122,9 @@ def _launch_prediction(
     has_affinity: bool = False,
 ) -> dict[str, Any]:
     """Common logic for launching a prediction job (local or SLURM)."""
+    # Auto-detect kernel availability
+    if "no_kernels" not in predict_kwargs:
+        predict_kwargs["no_kernels"] = not _kernels_available()
     session_key = _get_current_session_key()
     job_id = str(uuid.uuid4())
     now_iso = _utc_now_iso()

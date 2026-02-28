@@ -112,9 +112,10 @@ def _run_prediction_worker(
             "event": {"kind": "phase", "phase": "structure_prediction", "message": "Running structure prediction..."},
         })
 
-        # Call predict()
+        # Call predict() – use .callback() to invoke the underlying function
+        # directly, bypassing Click's CLI context machinery.
         from boltz.main import predict
-        predict(data=yaml_path, **predict_kwargs)
+        predict.callback(data=yaml_path, **predict_kwargs)
 
         _check_cancel(cancel_flag_path)
 
