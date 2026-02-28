@@ -193,7 +193,7 @@ def _launch_prediction(
         process = ctx.Process(
             target=_run_prediction_worker,
             args=(yaml_path, predict_kwargs, cancel_flag_path, child_conn, worker_log_path, cuda_devices),
-            daemon=True,
+            daemon=False,
         )
         process.start()
 

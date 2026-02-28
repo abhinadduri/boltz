@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import atexit
 import multiprocessing as mp
+import os
+import signal
 import threading
 import time
 from dataclasses import dataclass, field
@@ -130,3 +133,60 @@ def _append_job_log(job: PredictionJob, message: str) -> None:
     job.logs.append(line)
     if len(job.logs) > _JOB_LOG_LIMIT:
         del job.logs[: len(job.logs) - _JOB_LOG_LIMIT]
+
+
+# ---------------------------------------------------------------------------
+# Atexit cleanup for non-daemonic worker processes
+# ---------------------------------------------------------------------------
+
+def _cleanup_all_workers() -> None:
+    """Terminate all alive worker processes at interpreter shutdown.
+
+    Called via atexit. We intentionally do NOT acquire
+    ``_PREDICTION_JOBS_LOCK`` here — during interpreter teardown another
+    thread may hold the lock and never release it, which would deadlock.
+    This is safe because no new jobs can arrive once atexit handlers run.
+    """
+    # Collect all alive worker processes and their pipe connections.
+    alive_procs: list[mp.Process] = []
+    conns: list[Any] = []
+    for session_jobs in _PREDICTION_JOBS.values():
+        for job in session_jobs.values():
+            if job.process is not None and job.process.is_alive():
+                alive_procs.append(job.process)
+            if job.event_conn is not None:
+                conns.append(job.event_conn)
+
+    if not alive_procs:
+        return
+
+    # Phase 1: send SIGTERM to all alive workers in parallel so they can
+    # begin shutting down concurrently.
+    for proc in alive_procs:
+        try:
+            os.kill(proc.pid, signal.SIGTERM)
+        except (ProcessLookupError, OSError):
+            pass
+
+    # Phase 2: give each process up to 5 s to exit gracefully.
+    for proc in alive_procs:
+        proc.join(timeout=5)
+
+    # Phase 3: forcefully kill any survivors.
+    for proc in alive_procs:
+        if proc.is_alive():
+            try:
+                proc.kill()
+            except OSError:
+                pass
+            proc.join(timeout=2)
+
+    # Phase 4: close pipe connections.
+    for conn in conns:
+        try:
+            conn.close()
+        except OSError:
+            pass
+
+
+atexit.register(_cleanup_all_workers)
